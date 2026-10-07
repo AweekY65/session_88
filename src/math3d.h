@@ -2,47 +2,44 @@
 
 #include <cmath>
 
-struct Vec2 {
-    float x = 0.0f, y = 0.0f;
-};
+namespace sr {
 
-struct Vec3 {
-    float x = 0.0f, y = 0.0f, z = 0.0f;
-};
+constexpr float kPi = 3.14159265358979323846f;
 
-inline Vec3 operator+(Vec3 a, Vec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-inline Vec3 operator-(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
-inline Vec3 operator*(Vec3 a, float s) { return {a.x * s, a.y * s, a.z * s}; }
-inline float dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-inline Vec3 cross(Vec3 a, Vec3 b) {
+inline float radians(float degrees) { return degrees * kPi / 180.0f; }
+
+struct Vec2 { float x = 0.0f, y = 0.0f; };
+struct Vec3 { float x = 0.0f, y = 0.0f, z = 0.0f; };
+struct Vec4 { float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f; };
+
+inline Vec3 operator-(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline Vec3 cross(const Vec3& a, const Vec3& b) {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
-inline Vec3 normalize(Vec3 v) {
+inline float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline Vec3 normalize(const Vec3& v) {
     float len = std::sqrt(dot(v, v));
     return {v.x / len, v.y / len, v.z / len};
 }
 
-struct Vec4 {
-    float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
-};
-
-// Row-major 4x4 matrix, column-vector convention: v' = M * v.
 struct Mat4 {
     float m[4][4] = {};
-
     static Mat4 identity() {
         Mat4 r;
         for (int i = 0; i < 4; ++i) r.m[i][i] = 1.0f;
         return r;
     }
+    const float* operator[](int row) const { return m[row]; }
 };
 
 inline Mat4 operator*(const Mat4& a, const Mat4& b) {
     Mat4 r;
     for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            for (int k = 0; k < 4; ++k)
-                r.m[i][j] += a.m[i][k] * b.m[k][j];
+        for (int j = 0; j < 4; ++j) {
+            float s = 0.0f;
+            for (int k = 0; k < 4; ++k) s += a.m[i][k] * b.m[k][j];
+            r.m[i][j] = s;
+        }
     return r;
 }
 
@@ -55,7 +52,7 @@ inline Vec4 operator*(const Mat4& m, const Vec4& v) {
     };
 }
 
-inline Mat4 translate(float tx, float ty, float tz) {
+inline Mat4 translation(float tx, float ty, float tz) {
     Mat4 r = Mat4::identity();
     r.m[0][3] = tx;
     r.m[1][3] = ty;
@@ -63,35 +60,43 @@ inline Mat4 translate(float tx, float ty, float tz) {
     return r;
 }
 
-inline Mat4 scale(float sx, float sy, float sz) {
-    Mat4 r = Mat4::identity();
+inline Mat4 scaling(float sx, float sy, float sz) {
+    Mat4 r;
     r.m[0][0] = sx;
     r.m[1][1] = sy;
     r.m[2][2] = sz;
+    r.m[3][3] = 1.0f;
     return r;
 }
 
-inline Mat4 rotateX(float rad) {
-    float c = std::cos(rad), s = std::sin(rad);
+inline Mat4 rotationX(float rad) {
     Mat4 r = Mat4::identity();
+    float c = std::cos(rad), s = std::sin(rad);
     r.m[1][1] = c;  r.m[1][2] = -s;
     r.m[2][1] = s;  r.m[2][2] = c;
     return r;
 }
 
-inline Mat4 rotateY(float rad) {
-    float c = std::cos(rad), s = std::sin(rad);
+inline Mat4 rotationY(float rad) {
     Mat4 r = Mat4::identity();
+    float c = std::cos(rad), s = std::sin(rad);
     r.m[0][0] = c;  r.m[0][2] = s;
     r.m[2][0] = -s; r.m[2][2] = c;
     return r;
 }
 
-// OpenGL-style perspective projection: right-handed eye space (camera looks
-// down -Z), NDC in [-1,1]^3.
-inline Mat4 perspective(float fovYRad, float aspect, float zNear, float zFar) {
-    float f = 1.0f / std::tan(fovYRad * 0.5f);
+inline Mat4 rotationZ(float rad) {
+    Mat4 r = Mat4::identity();
+    float c = std::cos(rad), s = std::sin(rad);
+    r.m[0][0] = c;  r.m[0][1] = -s;
+    r.m[1][0] = s;  r.m[1][1] = c;
+    return r;
+}
+
+// Right-handed perspective projection. Camera looks down -Z, NDC z in [-1, 1].
+inline Mat4 perspective(float fovyRad, float aspect, float zNear, float zFar) {
     Mat4 r;
+    float f = 1.0f / std::tan(fovyRad * 0.5f);
     r.m[0][0] = f / aspect;
     r.m[1][1] = f;
     r.m[2][2] = (zFar + zNear) / (zNear - zFar);
@@ -100,7 +105,8 @@ inline Mat4 perspective(float fovYRad, float aspect, float zNear, float zFar) {
     return r;
 }
 
-inline Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) {
+// Right-handed lookAt view matrix.
+inline Mat4 lookAt(const Vec3& eye, const Vec3& center, const Vec3& up) {
     Vec3 f = normalize(center - eye);
     Vec3 s = normalize(cross(f, up));
     Vec3 u = cross(s, f);
@@ -110,3 +116,5 @@ inline Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) {
     r.m[2][0] = -f.x; r.m[2][1] = -f.y; r.m[2][2] = -f.z; r.m[2][3] = dot(f, eye);
     return r;
 }
+
+} // namespace sr
